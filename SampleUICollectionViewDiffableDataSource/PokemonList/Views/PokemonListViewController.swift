@@ -8,6 +8,11 @@
 import UIKit
 
 final class PokemonListViewController: UIViewController {
+    private enum ListItem: Hashable {
+        case pokemon(Pokemon)
+        case pokemonType(String)
+    }
+
     @IBOutlet private weak var collectionView: UICollectionView!
     @IBOutlet private weak var indicator: UIActivityIndicatorView!
 
@@ -64,18 +69,18 @@ extension PokemonListViewController: PokemonListPresenterOutput {
         collectionView.reloadData()
     }
 
-    func updateView(pokemonTypeItems: [ListItem], pokemons: [ListItem]) {
+    func updateView(pokemonTypeNames: [String], pokemons: [Pokemon]) {
         indicator.stopAnimating()
         indicator.isHidden = true
         view.alpha = 1.0
         // データソース登録
-        applyInitialSnapshots(pokemonTypeItems: pokemonTypeItems, pokemons: pokemons)
+        applyInitialSnapshots(pokemonTypeNames: pokemonTypeNames, pokemons: pokemons)
         // collectionView更新(DiffableDataSourceは不要かも？)
         collectionView.reloadData()
     }
 
-    func updateDataSoure(pokemons: [ListItem]) {
-        applySnapshot(items: pokemons, section: .pokemonList)
+    func updateDataSoure(pokemons: [Pokemon]) {
+        applyPokemonListSnapshot(pokemons: pokemons)
     }
 
     // 通信失敗時にアラートを表示する
@@ -94,19 +99,12 @@ extension PokemonListViewController: PokemonListPresenterOutput {
 // Cellタップ時に実行
 extension PokemonListViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        // Sectionを取得
-        guard let sectionKind = Section(rawValue: indexPath.section) else { fatalError("unexpectedError") }
+        guard let listItem = dataSource.itemIdentifier(for: indexPath) else { return }
 
-        switch sectionKind {
-        case .pokemonTypeList:
-            // タップしたポケモンのタイプを取得
-            guard let pokemonTypeListItem = dataSource.itemIdentifier(for: indexPath) else { fatalError("unexpectedError") }
-            guard let pokemonType = pokemonTypeListItem.pokemonType else { fatalError("unexpectedError") }
-            presenter.didTapPokemonTypeCell(pokemonType: pokemonType)
-        case .pokemonList:
-            // タップしたポケモンを取得
-            guard let listItem = dataSource.itemIdentifier(for: indexPath) else { fatalError("unexpectedError") }
-            guard let pokemon = listItem.pokemon else { fatalError("unexpectedError") }
+        switch listItem {
+        case .pokemonType(let typeName):
+            presenter.didTapPokemonTypeCell(pokemonType: typeName)
+        case .pokemon(let pokemon):
             presenter.didTapPokemonCell(pokemon: pokemon)
         }
     }
@@ -130,13 +128,24 @@ extension PokemonListViewController {
         // ※1: static let nib = UINib(nibName: String(describing: PokemonTypeCell.self), bundle: nil)
         let pokemonTypeCellRegistration = UICollectionView.CellRegistration<PokemonTypeCell, ListItem>(cellNib: PokemonTypeCell.nib) { cell, _, listItem in
             cell.layer.cornerRadius = 15
-            cell.configure(type: listItem.pokemonType)
+
+            switch listItem {
+            case .pokemon:
+                fatalError()
+            case .pokemonType(let typeName):
+                cell.configure(type: typeName)
+            }
         }
 
         // pokemonCellの登録
         let pokemonCellRegistration = UICollectionView.CellRegistration<PokemonCell, ListItem>(cellNib: PokemonCell.nib) { cell, _, listItem in
-            // Cellの構築処理
-            cell.configure(imageURL: item.pokemon?.sprites.frontImage, name: item.pokemon?.name)
+
+            switch listItem {
+            case .pokemon(let pokemon):
+                cell.configure(imageURL: pokemon.sprites.frontImage, name: pokemon.name)
+            case .pokemonType:
+                fatalError()
+            }
         }
 
         // data sourceの構築
@@ -226,9 +235,7 @@ extension PokemonListViewController {
 
 extension PokemonListViewController {
     /// 画面起動時にDataSourceにデータを登録
-    private func applyInitialSnapshots(pokemonTypeItems: [ListItem], pokemons: [ListItem] {
-        print("pokemonTypeItems:", pokemonTypeItems)
-        print("pokemons:", pokemons)
+    private func applyInitialSnapshots(pokemonTypeNames: [String], pokemons: [Pokemon]) {
         // データをViewに反映させる為のDiffableDataSourceSnapshotクラスのインスタンスを生成
         var snapshot = NSDiffableDataSourceSnapshot<Section, ListItem>()
         // snapshotにSectionを追加
@@ -237,20 +244,20 @@ extension PokemonListViewController {
 
         // pokemonTypeListのItemをSnapshotに追加 (orthogonal scroller)
         var pokemonTypeSnapshot = NSDiffableDataSourceSectionSnapshot<ListItem>()
-        pokemonTypeSnapshot.append(pokemonTypeItems)
+        pokemonTypeSnapshot.append(pokemonTypeNames.map { ListItem.pokemonType($0) })
         dataSource.apply(pokemonTypeSnapshot, to: .pokemonTypeList, animatingDifferences: true)
 
         // pokemonListのItemをSnapshotに追加
         var pokemonListSnapshot = NSDiffableDataSourceSectionSnapshot<ListItem>()
-        pokemonListSnapshot.append(pokemons)
+        pokemonListSnapshot.append(pokemons.map { ListItem.pokemon($0) })
         dataSource.apply(pokemonListSnapshot, to: .pokemonList, animatingDifferences: true)
     }
 
     /// 新たなsnapshotをDataSourceにapplyしてデータ更新
-    private func applySnapshot(items: [ListItem], section: Section) {
+    private func applyPokemonListSnapshot(pokemons: [Pokemon]) {
         var snapshot = NSDiffableDataSourceSectionSnapshot<ListItem>()
-        snapshot.append(items)
-        dataSource.apply(snapshot, to: section, animatingDifferences: true)
+        snapshot.append(pokemons.map { ListItem.pokemon($0) })
+        dataSource.apply(snapshot, to: .pokemonList, animatingDifferences: true)
     }
 }
 
