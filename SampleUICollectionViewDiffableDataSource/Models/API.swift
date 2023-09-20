@@ -17,7 +17,8 @@ protocol APIInput {
 
 final class API: APIInput {
     private var dataArray: [Data] = []
-    private var pokemons: [Pokemon] = []
+    private let decoder = JSONDecoder()
+//    private var pokemons: [Pokemon] = []
 
     // 通信によって取得したデータをパース
     // 取得したポケモンのデータをSwiftの型として扱う為にデコード
@@ -27,22 +28,15 @@ final class API: APIInput {
         fetchPokemonData(completion: { result in
             switch result {
             case .success(let dataArray):
-                var pokemons: [Pokemon] = []
-                dataArray.forEach {
                     do {
                         // DTOにdecode
-                        let pokemonDTO = try JSONDecoder().decode(PokemonDTO.self, from: $0)
                         // DTOをEntity(Pokemon)に変換
-                        let pokemon = pokemonDTO.convertToPokemon()
-                        // 変換した値をpokemonsの要素として追加
-                        pokemons.append(pokemon)
+                        let pokemons = try dataArray.map { try JSONDecoder().decode(PokemonDTO.self, from: $0).convertToPokemon() }
                         // pokemonsを呼び出し元に通知
                         completion(.success(pokemons))
                     } catch {
                         completion(.failure(error))
                     }
-                }
-                completion(.success(pokemons))
             case .failure(let error as URLError):
                 completion(.failure(error))
             case .failure(_):
@@ -54,24 +48,17 @@ final class API: APIInput {
     func decodePokemonData() async throws -> [Pokemon] {
         do {
             let dataArray = try await fetchPokemonData()
-            try dataArray.forEach {
-                // DTOにdecode
-                let pokemonDTO = try JSONDecoder().decode(PokemonDTO.self, from: $0)
-                // DTOをEntity(Pokemon)に変換
-                let pokemon = pokemonDTO.convertToPokemon()
-                // 変換した値をpokemonsの要素として追加
-                pokemons.append(pokemon)
-            }
+            return try dataArray.map { try decoder.decode(PokemonDTO.self, from: $0).convertToPokemon() }
         } catch {
             throw error
         }
-        return pokemons
     }
 
     // 通信を実行
     private func fetchPokemonData(completion: @escaping (Result<[Data], Error>) -> Void) {
         var dataArray: [Data] = []
         let urls = getURLs()
+        // TODO: 下に同じく。
         urls.forEach {
             guard let url = $0 else { return }
             let task = URLSession.shared.dataTask(with: url, completionHandler: { data, _, error in
@@ -92,6 +79,8 @@ final class API: APIInput {
     private func fetchPokemonData() async throws -> [Data] {
         let urls = getURLs()
         return try await withCheckedThrowingContinuation { continuation in
+            // TODO: これ、forEach使わない方法あるのか？
+            // こればっかりは493個のURLで通信してデータを取得しないといけないので代替案が思い浮かばない。
             urls.forEach {
                 guard let url = $0 else { return }
                 let task = URLSession.shared.dataTask(with: url, completionHandler: { [weak self] data, _, error in
