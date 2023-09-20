@@ -75,6 +75,7 @@ final class PokemonListPresenter {
             pokemons.append(contentsOf: pokemonsData)
             // Setは要素を一意にする為、一度追加されたタイプを自動で省いてくれる。(例: フシギダネが呼ばれると草タイプと毒タイプを取得するので次のフシギソウのタイプは追加されない。
             // 結果としてタイプリストの重複を避けることができる
+            // TODO: 加工した結果をどうこうしたいというわけではないのでこれもやはりforEachになってしまうのでは？
             pokemons.forEach {
                 $0.types.forEach { pokemonTypes.insert($0) }
             }
